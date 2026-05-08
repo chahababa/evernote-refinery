@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from evernote_refinery.attachments import AttachmentWriteResult, write_attachments
+from evernote_refinery.checkpoint import Checkpoint, note_checkpoint_key
 from evernote_refinery.markdown import enml_to_markdown
 from evernote_refinery.parser import Note, parse_enex
 
@@ -17,17 +18,25 @@ class NoteExport:
     metadata: dict[str, object] = field(default_factory=dict)
     features: dict[str, object] = field(default_factory=dict)
     attachments: AttachmentWriteResult = field(default_factory=AttachmentWriteResult)
+    checkpoint_key: str | None = None
 
 
-def build_exports_from_enex(enex_path: str | Path, output_dir: str | Path) -> Iterator[NoteExport]:
+def build_exports_from_enex(
+    enex_path: str | Path,
+    output_dir: str | Path,
+    checkpoint: Checkpoint | None = None,
+) -> Iterator[NoteExport]:
     """Stream an ENEX file and yield in-memory exports for each note."""
 
     for note in parse_enex(enex_path):
-        yield build_note_export(note, output_dir)
+        key = note_checkpoint_key(note)
+        if checkpoint is not None and checkpoint.is_completed(key):
+            continue
+        yield build_note_export(note, output_dir, checkpoint_key=key)
 
 
 
-def build_note_export(note: Note, output_dir: str | Path) -> NoteExport:
+def build_note_export(note: Note, output_dir: str | Path, checkpoint_key: str | None = None) -> NoteExport:
     """Build the in-memory export representation for a single parsed note."""
 
     attachments = write_attachments(note.resources, output_dir)
@@ -60,6 +69,7 @@ def build_note_export(note: Note, output_dir: str | Path) -> NoteExport:
         metadata=metadata,
         features=features,
         attachments=attachments,
+        checkpoint_key=checkpoint_key,
     )
 
 
