@@ -23,6 +23,11 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("enex", type=Path)
     export.add_argument("--output", "-o", type=Path, required=True)
     export.add_argument("--resume", action="store_true", help="Skip notes already recorded in the checkpoint file")
+    export.add_argument(
+        "--log-file",
+        type=Path,
+        help="Write JSONL processing logs to this path; defaults to <output>/export.log",
+    )
 
     return parser
 
@@ -37,11 +42,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "export":
         checkpoint = Checkpoint(args.output / ".evernote-refinery-checkpoint.json") if args.resume else None
-        result = export_enex(args.enex, args.output, checkpoint=checkpoint)
+        log_path = args.log_file or args.output / "export.log"
+        result = export_enex(args.enex, args.output, checkpoint=checkpoint, log_path=log_path)
         print(f"exported notes: {result.exported_notes}")
         print(f"failed notes: {result.failed_notes}")
         print(f"output: {args.output}")
         print(f"summary: {args.output / result.summary_path}")
+        if result.log_path is not None:
+            print(f"log: {log_path}")
         if result.failed_report_path is not None:
             print(f"failures: {args.output / result.failed_report_path}")
         if checkpoint is not None:
