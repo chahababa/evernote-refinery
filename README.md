@@ -13,6 +13,7 @@ Evernote 舊資料煉油廠：把 Evernote 匯出的 `.enex` 檔案轉成乾淨�
 - 產生 `summary.json` 對帳報告。
 - 單篇 note 匯出失敗時，隔離到 `failed/failures.json`，不中斷後續筆記。
 - 產生 JSONL 處理日誌 `export.log`。
+- 可產生 synthetic ENEX 測試檔，供本機壓力測試與 smoke test 使用。
 
 ## 安裝與開發
 
@@ -47,6 +48,18 @@ evernote-refinery export path/to/evernote-export.enex --output output/ --resume
 
 ```bash
 evernote-refinery export path/to/evernote-export.enex --output output/ --log-file output/logs/run.jsonl
+```
+
+產生 synthetic ENEX 測試檔：
+
+```bash
+evernote-refinery synthetic /tmp/stress.enex --notes 500 --attachments-per-note 1
+```
+
+再用同一套 export 流程做本機壓力 smoke test：
+
+```bash
+evernote-refinery export /tmp/stress.enex --output /tmp/stress-output --resume
 ```
 
 ## 輸出結構
@@ -91,3 +104,24 @@ export_finished
 - 原始 `.enex` 不會被修改或刪除。
 - `en-crypt` 內容會被安全遮蔽，不輸出原始加密 payload。
 - 附件檔名會經過 sanitize，並加上 hash prefix，避免路徑穿越與重名衝突。
+
+## 壓力測試建議
+
+本專案的 parser 使用 `lxml.iterparse` 串流處理 note，並在每篇 note 完成後清理 XML 節點，目標是避免大型 ENEX 一次載入整棵 XML tree。
+
+建議先用 synthetic ENEX 在本機跑 smoke test：
+
+```bash
+SMOKE_DIR=$(mktemp -d /tmp/evernote-refinery-stress.XXXXXX)
+evernote-refinery synthetic "$SMOKE_DIR/stress.enex" --notes 500 --attachments-per-note 1
+evernote-refinery export "$SMOKE_DIR/stress.enex" --output "$SMOKE_DIR/out" --resume --log-file "$SMOKE_DIR/logs/run.jsonl"
+python -m json.tool "$SMOKE_DIR/out/summary.json"
+python -m json.tool --json-lines "$SMOKE_DIR/logs/run.jsonl" >/dev/null
+```
+
+壓力測試時請確認：
+
+- `summary.json` 的 `total_notes`、`exported_notes`、`expected_attachments`、`written_attachments` 符合預期。
+- `failed_notes` 為 `0`，或失敗內容有出現在 `failed/failures.json`。
+- `export.log` 是合法 JSONL。
+- 使用 `--resume` 重跑時，已完成筆記會被 checkpoint 跳過。
