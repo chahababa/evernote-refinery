@@ -45,6 +45,31 @@ def test_cli_export_writes_summary_report(tmp_path, capsys):
     assert summary["written_attachments"] == 1
 
 
+def test_cli_export_writes_processing_log_by_default(tmp_path, capsys):
+    fixture = Path(__file__).parent / "fixtures" / "simple.enex"
+
+    exit_code = main(["export", str(fixture), "--output", str(tmp_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "log: " in captured.out
+    events = [json.loads(line) for line in (tmp_path / "export.log").read_text().splitlines()]
+    assert events[0]["event"] == "export_started"
+    assert events[-1]["event"] == "export_finished"
+
+
+def test_cli_export_accepts_custom_log_file(tmp_path, capsys):
+    fixture = Path(__file__).parent / "fixtures" / "simple.enex"
+    log_path = tmp_path / "logs" / "run.jsonl"
+
+    exit_code = main(["export", str(fixture), "--output", str(tmp_path / "out"), "--log-file", str(log_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert f"log: {log_path}" in captured.out
+    assert log_path.exists()
+
+
 def test_cli_export_resume_uses_checkpoint_to_skip_completed_notes(tmp_path, capsys):
     fixture = Path(__file__).parent / "fixtures" / "simple.enex"
 

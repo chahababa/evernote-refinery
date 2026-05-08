@@ -59,6 +59,23 @@ def test_export_enex_writes_reconciliation_summary(tmp_path):
     assert [row["title"] for row in rows] == ["First note", "Second note"]
 
 
+def test_export_enex_writes_processing_log(tmp_path):
+    enex = tmp_path / "two-notes.enex"
+    _write_enex(enex, ["First note", "Second note"])
+
+    result = export_enex(enex, tmp_path / "out", log_path=tmp_path / "out" / "export.log")
+
+    assert result.log_path == "export.log"
+    events = [json.loads(line) for line in (tmp_path / "out" / "export.log").read_text().splitlines()]
+    assert [event["event"] for event in events] == ["export_started", "note_exported", "note_exported", "export_finished"]
+    assert events[0]["enex_path"] == str(enex)
+    assert events[1]["title"] == "First note"
+    assert events[2]["title"] == "Second note"
+    assert events[-1]["total_notes"] == 2
+    assert events[-1]["exported_notes"] == 2
+    assert events[-1]["failed_notes"] == 0
+
+
 def test_export_enex_isolates_failed_notes_and_keeps_exporting(tmp_path):
     enex = tmp_path / "three-notes.enex"
     _write_enex(enex, ["Good one", "Bad one", "Good two"])

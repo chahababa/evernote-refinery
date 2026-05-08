@@ -25,6 +25,7 @@ class ExportRunResult:
     failures: list[dict[str, str]] = field(default_factory=list)
     summary_path: str = "summary.json"
     failed_report_path: str | None = None
+    log_path: str | None = None
 
 
 def export_enex(
@@ -33,6 +34,7 @@ def export_enex(
     *,
     checkpoint: Checkpoint | None = None,
     build_note: BuildNote = build_note_export,
+    log_path: str | Path | None = None,
 ) -> ExportRunResult:
     """Export an ENEX file while writing a reconciliation summary.
 
@@ -42,6 +44,11 @@ def export_enex(
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+    resolved_log_path = Path(log_path) if log_path is not None else None
+    if resolved_log_path is not None:
+        resolved_log_path.parent.mkdir(parents=True, exist_ok=True)
+        resolved_log_path.write_text("", encoding="utf-8")
+        _append_log(resolved_log_path, {"event": "export_started", "enex_path": str(enex_path), "output_dir": str(output_path)})
 
     total_notes = 0
     skipped_notes = 0
@@ -59,8 +66,13 @@ def export_enex(
         expected_attachments += len(note.resources)
         try:
             exports.append(build_note(note, output_path, key))
+            if resolved_log_path is not None:
+                _append_log(resolved_log_path, {"event": "note_exported", "title": note.title, "created": note.created})
         except Exception as exc:  # noqa: BLE001 - failure isolation must catch per-note export errors
-            failures.append(_failure_record(note, exc))
+            failure = _failure_record(note, exc)
+            failures.append(failure)
+            if resolved_log_path is not None:
+                _append_log(resolved_log_path, {"event": "note_failed", **failure})
 
     write_result = write_exports(exports, output_path, checkpoint=checkpoint)
     written_attachments = sum(len(export.attachments.paths_by_hash) for export in exports)
@@ -81,7 +93,19 @@ def export_enex(
         written_attachments=written_attachments,
         failures=failures,
         failed_report_path=failed_report_path,
+        log_path=_relative_path(resolved_log_path, output_path) if resolved_log_path is not None else None,
     )
+    if resolved_log_path is not None:
+        _append_log(
+            resolved_log_path,
+            {
+                "event": "export_finished",
+                "total_notes": result.total_notes,
+                "exported_notes": result.exported_notes,
+                "failed_notes": result.failed_notes,
+                "skipped_notes": result.skipped_notes,
+            },
+        )
     _write_json(output_path / result.summary_path, _summary_payload(result))
     return result
 
@@ -109,3 +133,17 @@ def _summary_payload(result: ExportRunResult) -> dict[str, object]:
 
 def _write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _append_log(path: Path, event: dict[str, object]) -> None:
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def _relative_path(path: Path | None, base: Path) -> str | None:
+    if path is None:
+        return None
+    try:
+        return path.relative_to(base).as_posix()
+    except ValueError:
+        return str(path)
