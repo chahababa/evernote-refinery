@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "evernote-refinery"
+version = "0.1.0"
+description = "Convert Evernote ENEX exports into clean Markdown, JSON, CSV, and extracted attachments."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Matt" }]
+dependencies = [
+  "lxml>=5.2",
+  "markdownify>=0.12",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2",
+]
+
+[project.scripts]
+evernote-refinery = "evernote_refinery.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/evernote_refinery"]
