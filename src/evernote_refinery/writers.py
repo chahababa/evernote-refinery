@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
+from evernote_refinery.checkpoint import Checkpoint
 from evernote_refinery.export import NoteExport
 
 
@@ -18,7 +19,11 @@ class ExportWriteResult:
     note_count: int = 0
 
 
-def write_exports(exports: Iterable[NoteExport], output_dir: str | Path) -> ExportWriteResult:
+def write_exports(
+    exports: Iterable[NoteExport],
+    output_dir: str | Path,
+    checkpoint: Checkpoint | None = None,
+) -> ExportWriteResult:
     """Write NoteExport records as Markdown, JSON metadata, and a CSV index."""
 
     output_path = Path(output_dir)
@@ -60,6 +65,8 @@ def write_exports(exports: Iterable[NoteExport], output_dir: str | Path) -> Expo
         markdown_paths.append(markdown_rel)
         metadata_paths.append(metadata_rel)
         rows.append(_index_row(export, markdown_rel, metadata_rel))
+        if checkpoint is not None and export.checkpoint_key is not None:
+            checkpoint.mark_completed(export.checkpoint_key)
 
     index_rel = "index.csv"
     with (output_path / index_rel).open("w", encoding="utf-8", newline="") as handle:
