@@ -5,9 +5,8 @@ from pathlib import Path
 from typing import Sequence
 
 from evernote_refinery.checkpoint import Checkpoint
-from evernote_refinery.export import build_exports_from_enex
 from evernote_refinery.parser import parse_enex
-from evernote_refinery.writers import write_exports
+from evernote_refinery.runner import export_enex
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -38,13 +37,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "export":
         checkpoint = Checkpoint(args.output / ".evernote-refinery-checkpoint.json") if args.resume else None
-        result = write_exports(
-            build_exports_from_enex(args.enex, args.output, checkpoint=checkpoint),
-            args.output,
-            checkpoint=checkpoint,
-        )
-        print(f"exported notes: {result.note_count}")
+        result = export_enex(args.enex, args.output, checkpoint=checkpoint)
+        print(f"exported notes: {result.exported_notes}")
+        print(f"failed notes: {result.failed_notes}")
         print(f"output: {args.output}")
+        print(f"summary: {args.output / result.summary_path}")
+        if result.failed_report_path is not None:
+            print(f"failures: {args.output / result.failed_report_path}")
         if checkpoint is not None:
             print(f"checkpoint: {checkpoint.path}")
         return 0
