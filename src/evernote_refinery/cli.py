@@ -4,7 +4,9 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
+from evernote_refinery.export import build_exports_from_enex
 from evernote_refinery.parser import parse_enex
+from evernote_refinery.writers import write_exports
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,6 +19,10 @@ def build_parser() -> argparse.ArgumentParser:
     count = subcommands.add_parser("count", help="Count notes in an ENEX file")
     count.add_argument("enex", type=Path)
 
+    export = subcommands.add_parser("export", help="Export an ENEX file to Markdown, JSON, CSV, and assets")
+    export.add_argument("enex", type=Path)
+    export.add_argument("--output", "-o", type=Path, required=True)
+
     return parser
 
 
@@ -26,6 +32,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "count":
         total = sum(1 for _note in parse_enex(args.enex))
         print(f"notes: {total}")
+        return 0
+
+    if args.command == "export":
+        result = write_exports(build_exports_from_enex(args.enex, args.output), args.output)
+        print(f"exported notes: {result.note_count}")
+        print(f"output: {args.output}")
         return 0
 
     raise SystemExit(f"Unknown command: {args.command}")
