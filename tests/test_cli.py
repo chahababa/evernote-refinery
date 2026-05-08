@@ -4,6 +4,20 @@ from pathlib import Path
 from evernote_refinery.cli import main
 
 
+def test_cli_synthetic_writes_large_test_enex(tmp_path, capsys):
+    enex = tmp_path / "stress.enex"
+
+    exit_code = main(["synthetic", str(enex), "--notes", "25", "--attachments-per-note", "2"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "synthetic notes: 25" in captured.out
+    assert "synthetic attachments: 50" in captured.out
+    assert enex.exists()
+    assert main(["count", str(enex)]) == 0
+    count_capture = capsys.readouterr()
+    assert "notes: 25" in count_capture.out
+
 def test_cli_count_prints_note_count(capsys):
     fixture = Path(__file__).parent / "fixtures" / "simple.enex"
 

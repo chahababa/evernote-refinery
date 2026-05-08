@@ -7,6 +7,7 @@ from typing import Sequence
 from evernote_refinery.checkpoint import Checkpoint
 from evernote_refinery.parser import parse_enex
 from evernote_refinery.runner import export_enex
+from evernote_refinery.synthetic import write_synthetic_enex
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -28,6 +29,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Write JSONL processing logs to this path; defaults to <output>/export.log",
     )
+
+    synthetic = subcommands.add_parser("synthetic", help="Write a deterministic synthetic ENEX file for stress testing")
+    synthetic.add_argument("output", type=Path)
+    synthetic.add_argument("--notes", type=int, default=100, help="Number of synthetic notes to write")
+    synthetic.add_argument("--attachments-per-note", type=int, default=0, help="Number of text attachments per synthetic note")
 
     return parser
 
@@ -54,6 +60,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"failures: {args.output / result.failed_report_path}")
         if checkpoint is not None:
             print(f"checkpoint: {checkpoint.path}")
+        return 0
+
+    if args.command == "synthetic":
+        result = write_synthetic_enex(args.output, note_count=args.notes, attachments_per_note=args.attachments_per_note)
+        print(f"synthetic notes: {result.note_count}")
+        print(f"synthetic attachments: {result.attachment_count}")
+        print(f"output: {result.path}")
         return 0
 
     raise SystemExit(f"Unknown command: {args.command}")
