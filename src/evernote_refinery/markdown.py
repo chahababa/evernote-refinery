@@ -30,10 +30,10 @@ def _rewrite_checkbox_divs_as_tasks(html: str) -> str:
         parent = checkbox.parent
         checked = checkbox.has_attr("checked")
         marker = "[x]" if checked else "[ ]"
-        checkbox.extract()
         text = parent.get_text(" ", strip=True) if parent else ""
         task_text = f"- {marker} {text}".strip()
         if parent is not None and parent.name in {"div", "p", "li"}:
+            checkbox.extract()
             parent.clear()
             parent.string = task_text
         else:
