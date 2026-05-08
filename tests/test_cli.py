@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from evernote_refinery.cli import main
@@ -25,6 +26,23 @@ def test_cli_export_writes_markdown_json_csv_outputs(tmp_path, capsys):
     assert list((tmp_path / "notes").glob("*.md"))
     assert list((tmp_path / "metadata").glob("*.json"))
     assert list((tmp_path / "assets").iterdir())
+
+
+def test_cli_export_writes_summary_report(tmp_path, capsys):
+    fixture = Path(__file__).parent / "fixtures" / "simple.enex"
+
+    exit_code = main(["export", str(fixture), "--output", str(tmp_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "summary: " in captured.out
+    assert "failed notes: 0" in captured.out
+    summary = json.loads((tmp_path / "summary.json").read_text())
+    assert summary["total_notes"] == 1
+    assert summary["exported_notes"] == 1
+    assert summary["failed_notes"] == 0
+    assert summary["expected_attachments"] == 1
+    assert summary["written_attachments"] == 1
 
 
 def test_cli_export_resume_uses_checkpoint_to_skip_completed_notes(tmp_path, capsys):
