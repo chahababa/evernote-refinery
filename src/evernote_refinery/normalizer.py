@@ -7,7 +7,11 @@ from bs4 import BeautifulSoup
 _IMAGE_MIME_PREFIX = "image/"
 
 
-def normalize_enml(enml: str, resource_paths: Mapping[str, str] | None = None) -> str:
+def normalize_enml(
+    enml: str,
+    resource_paths: Mapping[str, str] | None = None,
+    resource_mime_types: Mapping[str, str] | None = None,
+) -> str:
     """Normalize Evernote ENML into plain HTML before Markdown conversion.
 
     Evernote-specific tags such as ``en-todo``, ``en-media``, and ``en-crypt``
@@ -17,6 +21,7 @@ def normalize_enml(enml: str, resource_paths: Mapping[str, str] | None = None) -
 
     soup = BeautifulSoup(_strip_xml_preamble(enml), "html.parser")
     resource_paths = resource_paths or {}
+    resource_mime_types = resource_mime_types or {}
 
     for todo in soup.find_all("en-todo"):
         checkbox = soup.new_tag("input", type="checkbox")
@@ -27,7 +32,7 @@ def normalize_enml(enml: str, resource_paths: Mapping[str, str] | None = None) -
 
     for media in soup.find_all("en-media"):
         body_hash = media.get("hash", "")
-        mime = media.get("type", "")
+        mime = media.get("type", "") or resource_mime_types.get(body_hash, "")
         path = resource_paths.get(body_hash)
         if path and mime.startswith(_IMAGE_MIME_PREFIX):
             replacement = soup.new_tag("img", src=path)

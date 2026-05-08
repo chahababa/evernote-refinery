@@ -8,10 +8,18 @@ from markdownify import markdownify as html_to_markdown
 from evernote_refinery.normalizer import normalize_enml
 
 
-def enml_to_markdown(enml: str, resource_paths: Mapping[str, str] | None = None) -> str:
+def enml_to_markdown(
+    enml: str,
+    resource_paths: Mapping[str, str] | None = None,
+    resource_mime_types: Mapping[str, str] | None = None,
+) -> str:
     """Convert Evernote ENML to Markdown after normalizing custom tags."""
 
-    html = normalize_enml(enml, resource_paths=resource_paths)
+    html = normalize_enml(
+        enml,
+        resource_paths=resource_paths,
+        resource_mime_types=resource_mime_types,
+    )
     html = _rewrite_checkbox_divs_as_tasks(html)
     return html_to_markdown(html, heading_style="ATX").strip()
 
