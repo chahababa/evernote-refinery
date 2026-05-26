@@ -83,3 +83,54 @@ def test_write_exports_sanitizes_names_and_avoids_collisions(tmp_path):
     assert (tmp_path / "notes" / "a-b-c.md").read_text() == "first"
     assert (tmp_path / "notes" / "a-b-c-2.md").read_text() == "second"
     assert (tmp_path / "notes" / "untitled.md").read_text() == "blank"
+
+
+def test_write_exports_truncates_long_stems_with_deterministic_hash_suffix(tmp_path):
+    long_title = "非常長的筆記標題" * 40
+    export = NoteExport(
+        title=long_title,
+        markdown="long note",
+        metadata={"title": long_title, "created": "20260526010101Z"},
+    )
+
+    result = write_exports([export], tmp_path)
+
+    markdown_rel = result.markdown_paths[0]
+    metadata_rel = result.metadata_paths[0]
+    markdown_name = markdown_rel.removeprefix("notes/")
+    metadata_name = metadata_rel.removeprefix("metadata/")
+
+    assert markdown_rel.startswith("notes/20260526010101Z-")
+    assert markdown_rel.endswith(".md")
+    assert metadata_rel.endswith(".json")
+    assert len(markdown_name.encode("utf-8")) <= 255
+    assert len(metadata_name.encode("utf-8")) <= 255
+    assert markdown_name.rsplit(".", 1)[0] == metadata_name.rsplit(".", 1)[0]
+    assert (tmp_path / markdown_rel).read_text() == "long note"
+
+
+def test_write_exports_long_stem_collisions_stay_bounded_and_unique(tmp_path):
+    title = "同一個超長筆記標題" * 40
+    exports = [
+        NoteExport(title=title, markdown="first", metadata={"title": title}),
+        NoteExport(title=title, markdown="second", metadata={"title": title}),
+    ]
+
+    result = write_exports(exports, tmp_path)
+
+    assert len(set(result.markdown_paths)) == 2
+    for markdown_rel in result.markdown_paths:
+        assert len(markdown_rel.removeprefix("notes/").encode("utf-8")) <= 255
+
+
+def test_write_exports_sanitizes_created_prefix_before_building_paths(tmp_path):
+    export = NoteExport(
+        title="Path safe",
+        markdown="safe",
+        metadata={"title": "Path safe", "created": "2026/05/26:01"},
+    )
+
+    result = write_exports([export], tmp_path)
+
+    assert result.markdown_paths == ["notes/2026-05-26-01-path-safe.md"]
+    assert (tmp_path / "notes" / "2026-05-26-01-path-safe.md").read_text() == "safe"
