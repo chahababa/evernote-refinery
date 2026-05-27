@@ -69,3 +69,22 @@ def test_write_attachments_deduplicates_same_hash(tmp_path):
     assert result.paths_by_hash == {"samehash": "assets/samehash-first.txt"}
     assert len(list((tmp_path / "assets").iterdir())) == 1
     assert (tmp_path / "assets" / "samehash-first.txt").read_bytes() == b"same"
+
+
+def test_write_attachments_truncates_long_safe_names_with_hash_suffix(tmp_path):
+    body_hash = "a" * 64
+    resource = Resource(
+        mime="image/png",
+        file_name=f"{'long_' * 80}.png",
+        data=b"png",
+        body_hash=body_hash,
+    )
+
+    result = write_attachments([resource], tmp_path)
+
+    relative_path = result.paths_by_hash[body_hash]
+    filename = relative_path.removeprefix("assets/")
+    assert relative_path.startswith(f"assets/{body_hash}-long_")
+    assert relative_path.endswith(".png")
+    assert len(filename.encode("utf-8")) <= 255
+    assert (tmp_path / relative_path).read_bytes() == b"png"

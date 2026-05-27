@@ -1,5 +1,6 @@
 from bs4 import BeautifulSoup
 
+from evernote_refinery.markdown import enml_to_markdown
 from evernote_refinery.normalizer import normalize_enml
 
 
@@ -60,3 +61,15 @@ def test_normalize_enml_preserves_encrypted_blocks_as_redacted_notice():
     assert encrypted.text == "[Encrypted content: private]"
     assert "secret" not in html
     assert "en-crypt" not in html
+
+
+def test_enml_to_markdown_handles_multiple_todos_in_same_block_without_detached_tree_error():
+    enml = """
+    <en-note>
+      <div><en-todo checked="true"/>第一項<br/><en-todo/>第二項</div>
+    </en-note>
+    """
+
+    markdown = enml_to_markdown(enml)
+
+    assert markdown == "- [x] 第一項\n- [ ] 第二項"

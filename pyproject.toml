@@ -15,7 +15,7 @@ dependencies = [
   "markdownify>=0.12",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
   "pytest>=8.2",
 ]

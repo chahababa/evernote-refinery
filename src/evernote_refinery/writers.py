@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import re
 from dataclasses import dataclass, field
@@ -96,6 +97,9 @@ _INDEX_FIELDS = [
     "has_encrypted_content",
 ]
 
+_MAX_STEM_BYTES = 180
+_HASH_BYTES = 10
+
 
 def _index_row(export: NoteExport, markdown_path: str, metadata_path: str) -> dict[str, str]:
     metadata = export.metadata
@@ -124,8 +128,8 @@ def _base_stem(export: NoteExport) -> str:
     slug = _slugify(title)
     created = export.metadata.get("created")
     if created:
-        return f"{created}-{slug}"
-    return slug
+        return _shorten_stem(f"{_safe_prefix(str(created))}-{slug}")
+    return _shorten_stem(slug)
 
 
 def _slugify(value: str) -> str:
@@ -134,14 +138,44 @@ def _slugify(value: str) -> str:
     return slug or "untitled"
 
 
+def _safe_prefix(value: str) -> str:
+    prefix = re.sub(r"[^\w\u4e00-\u9fff]+", "-", value, flags=re.UNICODE)
+    prefix = re.sub(r"-+", "-", prefix).strip("-_")
+    return prefix or "undated"
+
+
 def _unique_stem(base: str, used_stems: set[str]) -> str:
     stem = base
     counter = 2
     while stem in used_stems:
-        stem = f"{base}-{counter}"
+        stem = _append_counter(base, counter)
         counter += 1
     used_stems.add(stem)
     return stem
+
+
+def _shorten_stem(stem: str, max_bytes: int = _MAX_STEM_BYTES) -> str:
+    encoded = stem.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return stem
+
+    digest = hashlib.sha1(encoded).hexdigest()[:_HASH_BYTES]
+    suffix = f"-{digest}"
+    prefix = _truncate_utf8(stem, max_bytes - len(suffix.encode("utf-8"))).strip("-_")
+    if not prefix:
+        prefix = "untitled"
+    return f"{prefix}{suffix}"
+
+
+def _append_counter(base: str, counter: int) -> str:
+    return _shorten_stem(f"{base}-{counter}")
+
+
+def _truncate_utf8(value: str, max_bytes: int) -> str:
+    if max_bytes <= 0:
+        return ""
+    encoded = value.encode("utf-8")[:max_bytes]
+    return encoded.decode("utf-8", errors="ignore")
 
 
 def _bool_text(value: object) -> str:
