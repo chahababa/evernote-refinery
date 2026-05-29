@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
+from evernote_refinery.ai_vault import build_ai_vault_prototype
 from evernote_refinery.checkpoint import Checkpoint
 from evernote_refinery.parser import parse_enex
 from evernote_refinery.runner import export_enex
@@ -34,6 +35,19 @@ def build_parser() -> argparse.ArgumentParser:
     synthetic.add_argument("output", type=Path)
     synthetic.add_argument("--notes", type=int, default=100, help="Number of synthetic notes to write")
     synthetic.add_argument("--attachments-per-note", type=int, default=0, help="Number of text attachments per synthetic note")
+
+    ai_vault = subcommands.add_parser(
+        "ai-vault",
+        help="Build a local-only AI Vault prototype from canonical refinery output",
+    )
+    ai_vault.add_argument("canonical_output", type=Path, help="Canonical refinery output root containing aggregate_index.csv")
+    ai_vault.add_argument("--output", "-o", type=Path, required=True, help="Local output directory for prototype artifacts")
+    ai_vault.add_argument(
+        "--sample-size",
+        type=int,
+        default=50,
+        help="Number of non-Trash draft rows to emit for review (20-50, default: 50)",
+    )
 
     return parser
 
@@ -67,6 +81,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"synthetic notes: {result.note_count}")
         print(f"synthetic attachments: {result.attachment_count}")
         print(f"output: {result.path}")
+        return 0
+
+    if args.command == "ai-vault":
+        result = build_ai_vault_prototype(args.canonical_output, args.output, sample_size=args.sample_size)
+        print(f"AI Vault prototype output: {result.output_dir}")
+        print(f"main knowledge map: {result.main_knowledge_map_path}")
+        print(f"trash safety map: {result.trash_safety_map_path}")
+        print(f"source index: {result.source_index_path}")
+        print(f"draft sample: {result.draft_sample_path}")
+        print(f"source readonly audit: {result.readonly_audit_path}")
+        print(f"summary: {result.summary_path}")
+        print(f"non-trash notes: {result.non_trash_notes}")
+        print(f"trash notes: {result.trash_notes}")
+        print(f"draft rows: {result.draft_rows}")
         return 0
 
     raise SystemExit(f"Unknown command: {args.command}")

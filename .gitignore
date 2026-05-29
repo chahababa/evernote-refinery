@@ -9,3 +9,6 @@ build/
 htmlcov/
 output/
 failed/
+.worktrees/
+ai-vault-output/
+ai-vault-prototype-output/
