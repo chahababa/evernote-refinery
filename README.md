@@ -56,6 +56,29 @@ evernote-refinery export path/to/evernote-export.enex --output output/ --log-fil
 evernote-refinery synthetic /tmp/stress.enex --notes 500 --attachments-per-note 1
 ```
 
+產生 AI Vault v1 local-only prototype（讀取 canonical refinery output；只寫入指定本機輸出資料夾）：
+
+```bash
+evernote-refinery ai-vault \
+  /home/chahababa/evernote-backup-work/refinery-output-full-20260527-pr10 \
+  --output ai-vault-prototype-output \
+  --sample-size 50
+```
+
+輸出 artifact：
+
+```text
+ai-vault-prototype-output/
+  main_knowledge_map.json       # 非 Trash 內容的知識地圖（含 source traceability）
+  trash_safety_map.json         # Trash 僅輸出 counts / risk categories，不重用內容或標題
+  source_index.csv              # 全部來源列 traceability + main/trash_quarantined 狀態
+  ai_vault_draft_sample.csv     # 12 欄、20-50 筆 review sample（會先做敏感資訊遮蔽）
+  source_readonly_audit.json    # canonical aggregate 檔案 pre/post mtime + sha256
+  prototype_summary.json        # 本次 prototype 摘要與安全政策
+```
+
+安全邊界：`ai-vault` 子命令不寫 Notion、不啟動 Telegram、不修改 canonical output；Trash 內容只做風險計數，不摘要、不匯入 sample。文字欄位會遮蔽常見 API key/token/JWT/connection string/email 型態，但 prototype 輸出仍需人工 review 後才可進下一階段。
+
 再用同一套 export 流程做本機壓力 smoke test：
 
 ```bash
