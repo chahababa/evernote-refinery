@@ -14,6 +14,7 @@ Evernote 舊資料煉油廠：把 Evernote 匯出的 `.enex` 檔案轉成乾淨�
 - 單篇 note 匯出失敗時，隔離到 `failed/failures.json`，不中斷後續筆記。
 - 產生 JSONL 處理日誌 `export.log`。
 - 可產生 synthetic ENEX 測試檔，供本機壓力測試與 smoke test 使用。
+- 可建立 local-only SQLite/FTS inventory，支援本機全文搜尋、metadata filters、read-only source audit。
 
 ## 安裝與開發
 
@@ -43,6 +44,35 @@ evernote-refinery export path/to/evernote-export.enex --output output/
 ```bash
 evernote-refinery export path/to/evernote-export.enex --output output/ --resume
 ```
+
+建立本機 SQLite/FTS inventory（只讀取 canonical conversion output，SQLite 寫到指定本機路徑）：
+
+```bash
+uv run evernote-refinery inventory build \
+  --aggregate-index /home/chahababa/evernote-backup-work/refinery-output-full-20260527-pr10/aggregate_index.csv \
+  --canonical-root /home/chahababa/evernote-backup-work/refinery-output-full-20260527-pr10 \
+  --output /home/chahababa/.hermes/user-data/evernote-search/evernote_refinery_index.sqlite \
+  --read-only-source-check
+```
+
+查看 inventory 統計：
+
+```bash
+uv run evernote-refinery inventory stats \
+  --index /home/chahababa/.hermes/user-data/evernote-search/evernote_refinery_index.sqlite
+```
+
+本機搜尋（預設排除 Trash、封存與 sensitive；需要時以 opt-in flag 放寬）：
+
+```bash
+uv run evernote-refinery search "客訴 牛肉" \
+  --index /home/chahababa/.hermes/user-data/evernote-search/evernote_refinery_index.sqlite \
+  --notebook-root HC_營運 \
+  --limit 20 \
+  --output paths
+```
+
+搜尋輸出可選 `paths`、`snippets`、`json`、`markdown`；`query_log` 只記錄 query/filter/result count，不存 note body。
 
 指定處理日誌位置：
 
