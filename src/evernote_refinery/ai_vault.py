@@ -96,7 +96,7 @@ def build_ai_vault_prototype(
             non_trash_rows.append(row)
 
     sampled_non_trash_rows = non_trash_rows[:sample_size]
-    tracked_sources = _tracked_source_files(canonical_root, sampled_non_trash_rows)
+    tracked_sources = _tracked_source_files(canonical_root, rows)
     pre_source_state = _source_state(tracked_sources)
 
     output_path.mkdir(parents=True, exist_ok=True)
@@ -179,11 +179,9 @@ def redact_sensitive_text(text: str) -> str:
     return redacted
 
 
-def _tracked_source_files(canonical_root: Path, sampled_non_trash_rows: list[dict[str, str]]) -> list[Path]:
+def _tracked_source_files(canonical_root: Path, rows: list[dict[str, str]]) -> list[Path]:
     candidates = [canonical_root / "aggregate_index.csv", canonical_root / "aggregate_summary.json", canonical_root / "run_manifest.jsonl"]
-    for row in sampled_non_trash_rows:
-        if _is_trash_row(row, canonical_root):
-            continue
+    for row in rows:
         for column in ("markdown_path", "metadata_path"):
             source_path = _safe_source_path(row, column, canonical_root)
             if source_path is not None:
@@ -196,7 +194,7 @@ def _tracked_source_files(canonical_root: Path, sampled_non_trash_rows: list[dic
         if resolved.exists() and resolved not in seen:
             seen.add(resolved)
             existing.append(resolved)
-    return existing
+    return sorted(existing)
 
 
 def _source_state(paths: Iterable[Path]) -> dict[str, dict[str, object]]:
@@ -429,7 +427,7 @@ def _draft_summary(markdown: str) -> str:
     normalized = re.sub(r"\s+", " ", markdown).strip()
     if not normalized:
         return ""
-    return redact_sensitive_text(normalized[:240])
+    return redact_sensitive_text(normalized)[:240]
 
 
 def _write_json(path: Path, payload: object) -> None:

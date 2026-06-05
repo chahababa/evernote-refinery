@@ -108,6 +108,7 @@ def test_build_ai_vault_prototype_writes_maps_sample_traceability_and_readonly_a
     assert audit["read_only_verified"] is True
     assert audit["pre_source_state"] == audit["post_source_state"]
     assert any(path.endswith("api_key-sk-testsecretvalue.md") for path in audit["tracked_source_files"])
+    assert any(path.endswith("api_key-sk-testsecretvalue.json") for path in audit["tracked_source_files"])
 
     main_map = json.loads((output / "main_knowledge_map.json").read_text(encoding="utf-8"))
     assert main_map["totals"]["non_trash_notes"] == 1
@@ -135,8 +136,63 @@ def test_build_ai_vault_prototype_writes_maps_sample_traceability_and_readonly_a
         source_rows = list(csv.DictReader(handle))
     assert len(source_rows) == 2
     assert {row["source_state"] for row in source_rows} == {"main", "trash_quarantined"}
-    assert "sk-testsecretvalue" not in json.dumps(source_rows, ensure_ascii=False)
-    assert "ghp_exampletokenvalue" not in json.dumps(source_rows, ensure_ascii=False)
+    assert "sk-tes...alue" not in json.dumps(source_rows, ensure_ascii=False)
+    assert "ghp_ex...alue" not in json.dumps(source_rows, ensure_ascii=False)
+
+
+def test_draft_summary_redacts_secrets_from_full_body_before_truncating(tmp_path):
+    canonical = _canonical_fixture(tmp_path)
+    note_path = canonical / "exports" / "00.行動區" / "$工作" / "策略" / "notes" / "api_key-sk-testsecretvalue.md"
+    crossing_cutoff_token = "sk-" + ("A" * 32)
+    note_path.write_text(("x" * 235) + " " + crossing_cutoff_token, encoding="utf-8")
+
+    output = tmp_path / "ai-vault-output"
+    build_ai_vault_prototype(canonical, output, sample_size=20)
+
+    with (output / "ai_vault_draft_sample.csv").open(encoding="utf-8", newline="") as handle:
+        sample_rows = list(csv.DictReader(handle))
+    assert crossing_cutoff_token not in sample_rows[0]["draft_summary"]
+    assert "sk-A" not in sample_rows[0]["draft_summary"]
+    assert "[RED" in sample_rows[0]["draft_summary"]
+
+
+def test_readonly_audit_tracks_source_files_beyond_draft_sample(tmp_path):
+    canonical = _canonical_fixture(tmp_path)
+    index = canonical / "aggregate_index.csv"
+    with index.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+
+    fieldnames = list(rows[0].keys())
+    for idx in range(25):
+        export_dir = canonical / "exports" / "00.行動區" / "$工作" / f"extra-{idx:02d}"
+        note_rel, meta_rel = _write_note(export_dir, f"extra {idx:02d}", f"extra body {idx:02d}")
+        rows.append({
+            "source_enex": f"/input/00.行動區/$工作/extra-{idx:02d}.enex",
+            "output_dir": str(export_dir),
+            "title": f"extra {idx:02d}",
+            "created": "20250101T000000Z",
+            "updated": "20250102T000000Z",
+            "tags": "alpha",
+            "markdown_path": note_rel,
+            "metadata_path": meta_rel,
+            "word_count": "10",
+            "resource_count": "0",
+            "has_attachments": "false",
+            "has_tasks": "false",
+            "has_encrypted_content": "false",
+        })
+
+    with index.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    output = tmp_path / "ai-vault-output"
+    build_ai_vault_prototype(canonical, output, sample_size=20)
+
+    audit = json.loads((output / "source_readonly_audit.json").read_text(encoding="utf-8"))
+    assert any(path.endswith("extra-24/notes/extra-24.md") for path in audit["tracked_source_files"])
+    assert any(path.endswith("extra-24/metadata/extra-24.json") for path in audit["tracked_source_files"])
 
 
 def test_build_ai_vault_prototype_rejects_sample_sizes_outside_review_range(tmp_path):
