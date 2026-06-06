@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 from typing import Sequence
 
 from evernote_refinery.ai_vault import build_ai_vault_prototype
 from evernote_refinery.checkpoint import Checkpoint
+from evernote_refinery.inventory import build_inventory, inventory_stats, search_inventory, write_markdown_results
 from evernote_refinery.parser import parse_enex
 from evernote_refinery.runner import export_enex
 from evernote_refinery.synthetic import write_synthetic_enex
@@ -48,6 +50,37 @@ def build_parser() -> argparse.ArgumentParser:
         default=50,
         help="Number of non-Trash draft rows to emit for review (20-50, default: 50)",
     )
+
+    inventory = subcommands.add_parser("inventory", help="Build and inspect a local-only SQLite/FTS inventory")
+    inventory_subcommands = inventory.add_subparsers(dest="inventory_command", required=True)
+    inventory_build = inventory_subcommands.add_parser("build", help="Build a local SQLite/FTS note inventory")
+    inventory_build.add_argument("--aggregate-index", type=Path, required=True, help="Canonical aggregate_index.csv")
+    inventory_build.add_argument("--canonical-root", type=Path, required=True, help="Canonical refinery output root")
+    inventory_build.add_argument("--output", "-o", type=Path, required=True, help="SQLite index output path")
+    inventory_build.add_argument("--read-only-source-check", action="store_true", help="Verify tracked canonical files are unchanged")
+
+    inventory_stats_cmd = inventory_subcommands.add_parser("stats", help="Print inventory counts as JSON")
+    inventory_stats_cmd.add_argument("--index", type=Path, required=True, help="SQLite inventory path")
+
+    search = subcommands.add_parser("search", help="Search the local SQLite/FTS inventory")
+    search.add_argument("query", help="Keyword or FTS query; whitespace terms are ANDed")
+    search.add_argument("--index", type=Path, required=True, help="SQLite inventory path")
+    search.add_argument("--notebook-root")
+    search.add_argument("--notebook-path")
+    search.add_argument("--category")
+    search.add_argument("--date-from")
+    search.add_argument("--date-to")
+    search.add_argument("--tag", action="append", dest="tags", default=[])
+    search.add_argument("--has-attachments", action="store_true")
+    search.add_argument("--has-tasks", action="store_true")
+    search.add_argument("--encrypted-only", action="store_true")
+    search.add_argument("--include-trash", action="store_true")
+    search.add_argument("--include-archive", action="store_true")
+    search.add_argument("--include-sensitive", action="store_true")
+    search.add_argument("--limit", type=int, default=20)
+    search.add_argument("--output", choices=["paths", "snippets", "json", "markdown"], default="snippets")
+    search.add_argument("--markdown-output", type=Path, help="Write markdown result list to this file when --output markdown")
+    search.add_argument("--no-query-log", action="store_true", help="Do not append metadata-only query_log row")
 
     return parser
 
@@ -95,6 +128,59 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"non-trash notes: {result.non_trash_notes}")
         print(f"trash notes: {result.trash_notes}")
         print(f"draft rows: {result.draft_rows}")
+        return 0
+
+    if args.command == "inventory":
+        if args.inventory_command == "build":
+            result = build_inventory(
+                args.aggregate_index,
+                args.canonical_root,
+                args.output,
+                read_only_source_check=args.read_only_source_check,
+            )
+            print(f"inventory index: {result.index_path}")
+            print(f"total rows: {result.total_rows}")
+            print(f"indexed rows: {result.indexed_rows}")
+            print(f"read-only verified: {str(result.read_only_verified).lower()}")
+            return 0
+        if args.inventory_command == "stats":
+            print(json.dumps(inventory_stats(args.index), ensure_ascii=False, indent=2, sort_keys=True))
+            return 0
+
+    if args.command == "search":
+        results = search_inventory(
+            args.index,
+            args.query,
+            notebook_root=args.notebook_root,
+            notebook_path=args.notebook_path,
+            category=args.category,
+            date_from=args.date_from,
+            date_to=args.date_to,
+            tags=args.tags,
+            has_attachments=True if args.has_attachments else None,
+            has_tasks=True if args.has_tasks else None,
+            encrypted_only=args.encrypted_only,
+            include_trash=args.include_trash,
+            include_archive=args.include_archive,
+            include_sensitive=args.include_sensitive,
+            limit=args.limit,
+            log_query=not args.no_query_log,
+        )
+        if args.output == "paths":
+            for item in results:
+                print(item.markdown_abs_path)
+        elif args.output == "json":
+            print(json.dumps([item.__dict__ for item in results], ensure_ascii=False, indent=2, sort_keys=True))
+        elif args.output == "markdown":
+            output = args.markdown_output or Path("evernote-search-results.md")
+            path = write_markdown_results(results, output, args.query)
+            print(f"markdown results: {path}")
+            print(f"results: {len(results)}")
+        else:
+            for item in results:
+                print(f"{item.title}\t{item.notebook_path}\t{item.markdown_abs_path}")
+                if item.snippet:
+                    print(f"  {item.snippet}")
         return 0
 
     raise SystemExit(f"Unknown command: {args.command}")
