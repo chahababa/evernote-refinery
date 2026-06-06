@@ -1,4 +1,5 @@
 import csv
+import hashlib
 import json
 import sqlite3
 from pathlib import Path
@@ -135,6 +136,34 @@ def test_inventory_build_derives_fields_and_preserves_readonly_sources(tmp_path)
         conn.close()
 
 
+def test_readonly_source_check_tracks_markdown_metadata_and_search_preserves_sources(tmp_path):
+    canonical = _canonical_inventory_fixture(tmp_path)
+    index = tmp_path / "evernote.sqlite"
+    markdown = canonical / "exports" / "HC_營運" / "客訴" / "牛肉客訴處理" / "notes" / "牛肉客訴處理.md"
+    metadata = canonical / "exports" / "HC_營運" / "客訴" / "牛肉客訴處理" / "metadata" / "牛肉客訴處理.json"
+
+    def source_state(path: Path) -> tuple[int, int, str]:
+        return (path.stat().st_size, path.stat().st_mtime_ns, hashlib.sha256(path.read_bytes()).hexdigest())
+
+    before = {markdown: source_state(markdown), metadata: source_state(metadata)}
+    build_inventory(canonical / "aggregate_index.csv", canonical, index, read_only_source_check=True)
+
+    conn = sqlite3.connect(index)
+    try:
+        audit = json.loads(conn.execute("SELECT value FROM build_audit WHERE key = 'summary'").fetchone()[0])
+    finally:
+        conn.close()
+    tracked = audit["tracked_source_files"]
+    assert str(markdown.resolve()) in tracked
+    assert str(metadata.resolve()) in tracked
+    assert audit["pre_source_state"][str(markdown.resolve())] == audit["post_source_state"][str(markdown.resolve())]
+    assert audit["pre_source_state"][str(metadata.resolve())] == audit["post_source_state"][str(metadata.resolve())]
+    assert before == {markdown: source_state(markdown), metadata: source_state(metadata)}
+
+    search_inventory(index, "客訴 牛肉", notebook_root="HC_營運")
+    assert before == {markdown: source_state(markdown), metadata: source_state(metadata)}
+
+
 def test_inventory_build_can_rebuild_existing_index_with_current_schema(tmp_path):
     canonical = _canonical_inventory_fixture(tmp_path)
     index = tmp_path / "evernote.sqlite"
@@ -154,8 +183,25 @@ def test_inventory_build_can_rebuild_existing_index_with_current_schema(tmp_path
 def test_classifiers_detect_taxonomy_sensitivity_and_encrypted_flags():
     assert classify_category("HC_營運/客訴", "牛肉") == "operations"
     assert classify_category("Trash", "舊資料") == "trash"
-    assert classify_sensitivity(title="API", tags=["credential"], notebook_path="00.行動區", body="api_key=sk-testfixturevalue") == "credential_risk"
+    assert classify_sensitivity(title="API", tags=["credential"], notebook_path="00.行動區", body="api_key=sk-tes...alue") == "credential_risk"
     assert classify_sensitivity(title="加密", tags=[], notebook_path="HC_營運", has_encrypted_content=True) == "encrypted"
+
+
+def test_classify_sensitivity_scans_secret_and_private_indicators_after_2kb():
+    late_secret = "sk-" + ("A" * 32)
+    assert classify_sensitivity(
+        title="普通筆記",
+        tags=[],
+        notebook_path="HC_營運",
+        body=("x" * 2500) + f" api_key={late_secret}",
+    ) == "credential_risk"
+
+    assert classify_sensitivity(
+        title="普通筆記",
+        tags=[],
+        notebook_path="HC_營運",
+        body=("x" * 2500) + " medical private health note",
+    ) == "sensitive"
 
 
 def test_search_supports_cjk_filters_and_default_safety_boundaries(tmp_path):

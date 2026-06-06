@@ -363,7 +363,7 @@ def classify_category(notebook_path: str, title: str = "", tags: Sequence[str] |
 def classify_sensitivity(*, title: str, tags: Sequence[str], notebook_path: str, body: str = "", has_encrypted_content: bool = False) -> str:
     if has_encrypted_content:
         return "encrypted"
-    text = " ".join([title, notebook_path, " ".join(tags), body[:2000]])
+    text = " ".join([title, notebook_path, " ".join(tags), body])
     if SECRET_LIKE_PATTERN.search(text):
         return "credential_risk"
     for pattern in SENSITIVE_PATTERNS:
@@ -519,8 +519,22 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
 
 
 def _tracked_readonly_files(canonical_root: Path, aggregate_path: Path) -> list[Path]:
-    candidates = [aggregate_path, canonical_root / "aggregate_summary.json"]
-    return [p.resolve() for p in candidates if p.exists()]
+    candidates = [aggregate_path, canonical_root / "aggregate_summary.json", canonical_root / "run_manifest.jsonl"]
+    if aggregate_path.exists():
+        for row in _load_rows(aggregate_path):
+            for column in ("markdown_path", "metadata_path"):
+                source_path = _safe_source_path(row, column, canonical_root)
+                if source_path is not None:
+                    candidates.append(source_path)
+
+    seen: set[Path] = set()
+    tracked: list[Path] = []
+    for path in candidates:
+        resolved = path.resolve()
+        if resolved.exists() and resolved not in seen:
+            seen.add(resolved)
+            tracked.append(resolved)
+    return sorted(tracked)
 
 
 def _source_state(paths: Iterable[Path]) -> dict[str, dict[str, object]]:
